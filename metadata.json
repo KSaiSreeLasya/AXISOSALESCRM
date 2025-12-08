@@ -1,0 +1,5 @@
+{
+  "name": "Axis CRM",
+  "description": "A modern Sales CRM that syncs directly with Google Sheets. Features Kanban boards, data visualization, and AI-powered lead analysis using Gemini.",
+  "requestFramePermissions": []
+}
