@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, Users, KanbanSquare, Settings, RefreshCw, X, Sparkles, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Users, KanbanSquare, Settings, RefreshCw, X, Sparkles, ShieldCheck, LogOut, Zap } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { LeadList } from './components/LeadList';
 import { Kanban } from './components/Kanban';
 import { SalesTeam } from './components/SalesTeam';
 import { LeadDetailModal } from './components/LeadDetailModal';
-import { Lead, SheetConfig, DashboardMetrics, SalesPerson, ActivityLogEntry, Note } from './types';
+import { Login } from './components/Login';
+import { Lead, SheetConfig, DashboardMetrics, SalesPerson, ActivityLogEntry, Note, User } from './types';
 import { parseCSV, MOCK_DATA } from './utils/helpers';
 import { analyzeLead } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
@@ -27,7 +28,13 @@ const DEFAULT_CONFIG: SheetConfig = {
 };
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'dashboard' | 'leads' | 'kanban' | 'team' | 'settings'>('leads');
+  // Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loginError, setLoginError] = useState<string>('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // App State
+  const [currentView, setCurrentView] = useState<'dashboard' | 'leads' | 'kanban' | 'team' | 'settings'>('dashboard');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [config, setConfig] = useState<SheetConfig>(DEFAULT_CONFIG);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,12 +61,72 @@ const App: React.FC = () => {
     };
   }, [leads]);
 
+  // Handle Login
+  const handleLogin = async (email: string, pass: string) => {
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    try {
+      // 1. Check Admin Credentials (Hardcoded as per request)
+      if (email === 'admin@axisogreen.in' && pass === 'admin2024') {
+        setCurrentUser({
+          id: 'admin',
+          name: 'Admin User',
+          email: email,
+          role: 'admin'
+        });
+        setCurrentView('dashboard');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // 2. Check Sales Person Credentials from DB
+      // Note: In a real production app, use Supabase Auth. This is a custom check per request.
+      const { data: spData, error } = await supabase
+        .from('sales_persons')
+        .select('*')
+        .eq('email', email)
+        .eq('password', pass) // Direct comparison as requested (Not secure for Prod)
+        .single();
+
+      if (error || !spData) {
+        throw new Error('Invalid email or password');
+      }
+
+      if (!spData.active) {
+         throw new Error('Account is inactive. Contact admin.');
+      }
+
+      setCurrentUser({
+        id: spData.id,
+        name: spData.name,
+        email: spData.email,
+        role: 'salesperson'
+      });
+      setCurrentView('dashboard');
+
+    } catch (err: any) {
+      console.error(err);
+      setLoginError(err.message || 'Login failed');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setLeads([]);
+    setSalesPersons([]);
+  };
+
   // Fetch Data from Supabase
   const fetchData = useCallback(async () => {
+    if (!currentUser) return;
+
     try {
       // Fetch Sales Persons
       const { data: spData, error: spError } = await supabase.from('sales_persons').select('*');
-      if (spError) throw spError;
+      if (spError) console.warn('Error fetching sales persons (check RLS?):', spError);
       setSalesPersons(spData || []);
 
       // Fetch Leads with Relations
@@ -72,7 +139,10 @@ const App: React.FC = () => {
         `)
         .order('created_at', { ascending: false });
       
-      if (leadsError) throw leadsError;
+      if (leadsError) {
+        console.error('Error fetching leads:', leadsError);
+        return;
+      }
 
       if (leadsData) {
         // Map DB snake_case to CamelCase
@@ -80,14 +150,16 @@ const App: React.FC = () => {
         setLeads(mappedLeads);
       }
     } catch (err) {
-      console.error('Error fetching data:', err);
+      console.error('Unexpected error fetching data:', err);
     }
-  }, []);
+  }, [currentUser]);
 
-  // Initial Load
+  // Load data when user logs in
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (currentUser) {
+      fetchData();
+    }
+  }, [currentUser, fetchData]);
 
   const syncData = useCallback(async () => {
     setIsLoading(true);
@@ -106,19 +178,25 @@ const App: React.FC = () => {
           const text = await response.text();
           const sheetLeads = parseCSV(text, tab.name);
 
+          console.log(`Parsed ${sheetLeads.length} leads from ${tab.name}`);
+
           if (sheetLeads.length > 0) {
             setSyncStatus(`Syncing ${sheetLeads.length} records for ${tab.name}...`);
             
             // 1. Upsert Leads
             const dbLeads = sheetLeads.map(mapLeadToDB);
+            
+            // Using upsert. Ensure RLS policies allow 'insert' and 'update' for anon if not using auth
             const { error: upsertError } = await supabase
               .from('leads')
-              .upsert(dbLeads, { onConflict: 'id', ignoreDuplicates: false }); // Update if exists
+              .upsert(dbLeads, { onConflict: 'id', ignoreDuplicates: false }); 
             
-            if (upsertError) throw upsertError;
+            if (upsertError) {
+                console.error(`Supabase Upsert Error for ${tab.name}:`, upsertError);
+                throw upsertError;
+            }
 
-            // 2. Insert Initial Notes & Logs (Only if they don't exist is harder in batch, 
-            // so we rely on the ID generation from parseCSV being deterministic)
+            // 2. Insert Initial Notes & Logs
             const initialNotes = sheetLeads.flatMap(l => 
               l.notes.map(n => ({ 
                 id: n.id, lead_id: l.id, content: n.content, timestamp: n.timestamp, author: n.author 
@@ -132,43 +210,41 @@ const App: React.FC = () => {
             );
 
             if (initialNotes.length > 0) {
-                await supabase.from('notes').upsert(initialNotes, { onConflict: 'id', ignoreDuplicates: true });
+                const { error: notesError } = await supabase.from('notes').upsert(initialNotes, { onConflict: 'id', ignoreDuplicates: true });
+                if (notesError) console.error('Notes upsert error:', notesError);
             }
             if (initialLogs.length > 0) {
-                await supabase.from('activity_logs').upsert(initialLogs, { onConflict: 'id', ignoreDuplicates: true });
+               const { error: logsError } = await supabase.from('activity_logs').upsert(initialLogs, { onConflict: 'id', ignoreDuplicates: true });
+               if (logsError) console.error('Logs upsert error:', logsError);
             }
           }
 
-        } catch (err) {
+        } catch (err: any) {
           console.error(`Failed to sync ${tab.name}`, err);
-          errors.push(tab.name);
+          errors.push(`${tab.name} (${err.message || 'Unknown error'})`);
         }
       }
 
       setConfig(prev => ({ ...prev, lastSynced: Date.now() }));
-      setSyncStatus(errors.length > 0 ? `Synced with errors in: ${errors.join(', ')}` : 'Sync complete!');
+      
+      if (errors.length > 0) {
+          setSyncStatus(`Errors: ${errors.join(', ')}`);
+          alert(`Sync encountered errors:\n${errors.join('\n')}\n\nCheck console for details.`);
+      } else {
+          setSyncStatus('Sync complete!');
+      }
       
       // Refresh local state from DB
       await fetchData();
 
     } catch (err) {
       console.error(err);
-      setSyncStatus("Sync failed. Check console.");
+      setSyncStatus("Sync failed completely.");
     } finally {
       setIsLoading(false);
-      setTimeout(() => setSyncStatus(''), 3000);
+      setTimeout(() => setSyncStatus(''), 5000);
     }
   }, [config, fetchData]);
-
-  // Auto-sync logic (Optional: can be annoying if it runs too often, maybe just load DB on mount)
-  // We keep it as per request
-  useEffect(() => {
-    if (config.autoSync && leads.length === 0 && !isLoading) {
-       // Only auto-sync if we have no data, otherwise rely on DB fetch
-       // Or if user explicitly hits Sync button
-    }
-  }, [config.autoSync]);
-
 
   // Handle updates to lead (Status, Assignment, Notes)
   const handleUpdateLead = async (leadId: string, updates: Partial<Lead>) => {
@@ -187,15 +263,16 @@ const App: React.FC = () => {
 
       // Update Lead Table
       if (Object.keys(dbUpdates).length > 0) {
-          await supabase.from('leads').update(dbUpdates).eq('id', leadId);
-          
+          const { error } = await supabase.from('leads').update(dbUpdates).eq('id', leadId);
+          if (error) throw error;
+
           // Log Activity for status change
           if (updates.status && updates.status !== currentLead.status) {
               await supabase.from('activity_logs').insert({
                   lead_id: leadId,
                   type: 'status_change',
                   description: `Status changed from ${currentLead.status} to ${updates.status}`,
-                  author: 'User'
+                  author: currentUser?.name || 'User'
               });
           }
           // Log Activity for Assignment
@@ -205,7 +282,7 @@ const App: React.FC = () => {
                   lead_id: leadId,
                   type: 'assignment',
                   description: `Assigned to ${spName}`,
-                  author: 'User'
+                  author: currentUser?.name || 'User'
               });
           }
       }
@@ -217,19 +294,16 @@ const App: React.FC = () => {
               lead_id: leadId,
               content: newNote.content,
               timestamp: newNote.timestamp,
-              author: newNote.author
+              author: currentUser?.name || 'User'
           });
           
            await supabase.from('activity_logs').insert({
               lead_id: leadId,
               type: 'note_update',
               description: 'Note added',
-              author: 'User'
+              author: currentUser?.name || 'User'
           });
       }
-
-      // Refresh data to get exact server state (optional, but good for consistency)
-      // await fetchData(); 
 
       // Update selected lead if open
       if (selectedLead && selectedLead.id === leadId) {
@@ -237,10 +311,9 @@ const App: React.FC = () => {
           setSelectedLead(prev => prev ? ({ ...prev, ...updates }) : null);
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Update failed", err);
-      alert("Failed to save changes to database.");
-      // Revert optimistic update? (omitted for brevity)
+      alert(`Failed to save changes: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -286,9 +359,11 @@ const App: React.FC = () => {
       if (selectedLead?.id === leadId) setSelectedLead(null);
 
       try {
-        await supabase.from('leads').delete().eq('id', leadId);
-      } catch (err) {
+        const { error } = await supabase.from('leads').delete().eq('id', leadId);
+        if (error) throw error;
+      } catch (err: any) {
         console.error("Delete failed", err);
+        alert(`Delete failed: ${err.message}`);
         fetchData(); // Revert
       }
     }
@@ -332,9 +407,33 @@ const App: React.FC = () => {
         });
         if (error) throw error;
         setSalesPersons(prev => [...prev, member]);
-    } catch (err) {
+    } catch (err: any) {
         console.error("Failed to add sales person", err);
-        alert("Failed to add member to database.");
+        alert(`Failed to add member: ${err.message}`);
+    }
+  };
+
+  const handleUpdateSalesPerson = async (id: string, updates: Partial<SalesPerson>) => {
+    try {
+        const { error } = await supabase.from('sales_persons').update({
+            name: updates.name,
+            email: updates.email,
+            phone: updates.phone,
+            password: updates.password
+        }).eq('id', id);
+
+        if (error) throw error;
+        
+        // Update local state
+        setSalesPersons(prev => prev.map(sp => sp.id === id ? { ...sp, ...updates } : sp));
+        
+        // If updating self, update current user name/email locally
+        if (currentUser && currentUser.id === id) {
+            setCurrentUser(prev => prev ? ({ ...prev, name: updates.name || prev.name, email: updates.email || prev.email }) : null);
+        }
+    } catch (err: any) {
+        console.error("Failed to update sales person", err);
+        alert(`Failed to update member: ${err.message}`);
     }
   };
 
@@ -343,10 +442,25 @@ const App: React.FC = () => {
         const { error } = await supabase.from('sales_persons').delete().eq('id', id);
         if (error) throw error;
         setSalesPersons(prev => prev.filter(p => p.id !== id));
-    } catch (err) {
+    } catch (err: any) {
         console.error("Failed to remove sales person", err);
+        alert(`Failed to delete member: ${err.message}`);
     }
   };
+
+  // Render Login Screen if not authenticated
+  if (!currentUser) {
+    return <Login onLogin={handleLogin} isLoading={isLoggingIn} error={loginError} />;
+  }
+
+  // Define Menu Items based on Role
+  const menuItems = [
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', visible: true },
+    { id: 'leads', icon: Users, label: 'Leads Data', visible: true },
+    { id: 'kanban', icon: KanbanSquare, label: 'Pipeline', visible: true },
+    { id: 'team', icon: ShieldCheck, label: 'Sales Team', visible: true }, // Requested to be visible for all? "when salesperson ... sheet config should not be display". Implies Team is visible.
+    { id: 'settings', icon: Settings, label: 'Sheet Config', visible: currentUser.role === 'admin' },
+  ];
 
   return (
     <div className="flex h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden">
@@ -354,18 +468,14 @@ const App: React.FC = () => {
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col z-20 shadow-sm hidden md:flex">
         <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md shadow-brand-200">A</div>
-          <span className="text-xl font-bold tracking-tight text-gray-800">Axis<span className="text-brand-600">Solar</span></span>
+          <div className="flex flex-col">
+             <h1 className="text-lg font-bold tracking-tight text-gray-900 leading-none">Axiso <span className="text-brand-600">Green</span></h1>
+             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Sales CRM</span>
+          </div>
         </div>
         
         <nav className="flex-1 px-4 py-4 space-y-1">
-          {[
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-            { id: 'leads', icon: Users, label: 'Leads Data' },
-            { id: 'kanban', icon: KanbanSquare, label: 'Pipeline' },
-            { id: 'team', icon: ShieldCheck, label: 'Sales Team' },
-            { id: 'settings', icon: Settings, label: 'Sheet Config' },
-          ].map(item => (
+          {menuItems.filter(item => item.visible).map(item => (
             <button
               key={item.id}
               onClick={() => setCurrentView(item.id as any)}
@@ -380,6 +490,25 @@ const App: React.FC = () => {
             </button>
           ))}
         </nav>
+
+        <div className="p-4 border-t border-gray-100">
+           <div className="flex items-center gap-3 px-3 py-2">
+              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
+                 {currentUser.name.charAt(0)}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                 <p className="text-sm font-medium text-gray-900 truncate">{currentUser.name}</p>
+                 <p className="text-xs text-gray-500 capitalize">{currentUser.role}</p>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="text-gray-400 hover:text-red-500 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={18} />
+              </button>
+           </div>
+        </div>
       </aside>
 
       {/* Main Content */}
@@ -387,7 +516,7 @@ const App: React.FC = () => {
         {/* Header */}
         <header className="h-16 bg-white border-b border-gray-200 flex justify-between items-center px-6 z-10 shrink-0">
           <div className="flex items-center gap-4 md:hidden">
-             <div className="w-8 h-8 bg-brand-600 rounded text-white flex items-center justify-center font-bold">A</div>
+             <span className="font-bold text-gray-900">Axiso Green</span>
           </div>
           
           <h1 className="text-xl font-bold text-gray-800 hidden md:block capitalize">
@@ -406,6 +535,9 @@ const App: React.FC = () => {
               <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
               {isLoading ? 'Syncing...' : 'Sync All Sheets'}
             </button>
+            <button className="md:hidden text-gray-500" onClick={handleLogout}>
+               <LogOut size={20} />
+            </button>
           </div>
         </header>
 
@@ -418,6 +550,7 @@ const App: React.FC = () => {
                 leads={leads} 
                 sheetTabs={config.tabs}
                 salesPersons={salesPersons}
+                currentUser={currentUser}
                 onUpdateLead={handleUpdateLead}
                 onAutoAssign={handleAutoAssign}
                 onSelectLead={setSelectedLead}
@@ -429,13 +562,15 @@ const App: React.FC = () => {
           
           {currentView === 'team' && (
             <SalesTeam 
+                currentUser={currentUser}
                 members={salesPersons} 
                 onAddMember={handleAddSalesPerson} 
-                onRemoveMember={handleRemoveSalesPerson} 
+                onRemoveMember={handleRemoveSalesPerson}
+                onUpdateMember={handleUpdateSalesPerson}
             />
           )}
           
-          {currentView === 'settings' && (
+          {currentView === 'settings' && currentUser.role === 'admin' && (
             <div className="max-w-2xl bg-white rounded-xl shadow-sm border border-gray-100 p-8 animate-in fade-in duration-500">
                <h2 className="text-xl font-bold mb-6 text-gray-800">Sheet Configuration</h2>
                

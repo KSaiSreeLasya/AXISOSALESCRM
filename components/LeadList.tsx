@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
-import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2 } from 'lucide-react';
-import { Lead, SalesPerson, SheetTab } from '../types';
+import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2, UserCheck, Layers } from 'lucide-react';
+import { Lead, SalesPerson, SheetTab, User } from '../types';
 import { LEAD_STATUSES } from '../utils/helpers';
 
 interface LeadListProps {
   leads: Lead[];
   sheetTabs: SheetTab[];
   salesPersons: SalesPerson[];
+  currentUser: User;
   onUpdateLead: (leadId: string, updates: Partial<Lead>) => void;
   onAutoAssign: (sheetScope: string) => void;
   onSelectLead: (lead: Lead) => void;
   onDeleteLead: (leadId: string) => void;
 }
 
-export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPersons, onUpdateLead, onAutoAssign, onSelectLead, onDeleteLead }) => {
+export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPersons, currentUser, onUpdateLead, onAutoAssign, onSelectLead, onDeleteLead }) => {
   const [search, setSearch] = useState('');
   const [activeSheet, setActiveSheet] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
 
   // Combine configured tabs with any other sheet names found in leads
   const availableSheets = Array.from(new Set([
@@ -26,15 +28,23 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
   ]));
 
   const filteredLeads = leads.filter(lead => {
+    // 1. Text Search
     const matchesSearch = 
       lead.name.toLowerCase().includes(search.toLowerCase()) || 
       lead.phone.includes(search) ||
-      lead.address.toLowerCase().includes(search.toLowerCase());
+      lead.address.toLowerCase().includes(search.toLowerCase()) ||
+      lead.postCode.includes(search);
     
+    // 2. Sheet Filter
     const matchesSheet = activeSheet === 'All' || lead.sheetName === activeSheet;
+    
+    // 3. Status Filter
     const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
 
-    return matchesSearch && matchesSheet && matchesStatus;
+    // 4. My Leads Filter
+    const matchesOwner = viewMode === 'all' ? true : lead.assignedTo === currentUser.id;
+
+    return matchesSearch && matchesSheet && matchesStatus && matchesOwner;
   });
 
   const getStatusColor = (status: string) => {
@@ -46,6 +56,13 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
     return 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
+  const isTargetPincode = (pincode: string | undefined) => {
+    if (!pincode) return false;
+    // Extract numbers just in case there are spaces
+    const cleanPin = parseInt(pincode.replace(/\D/g, ''), 10);
+    return !isNaN(cleanPin) && cleanPin >= 500001 && cleanPin <= 509412;
+  };
+
   const unassignedCount = filteredLeads.filter(l => !l.assignedTo).length;
 
   return (
@@ -54,15 +71,43 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
       {/* Header & Controls */}
       <div className="p-4 border-b border-gray-100 flex flex-col gap-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-             <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-               <FileSpreadsheet className="text-brand-600" size={20} />
-               Lead Data
-             </h2>
-             <p className="text-xs text-gray-500 mt-1">Manage, assign, and track all your incoming sheet leads.</p>
+          <div className="flex flex-col gap-3">
+             <div>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <FileSpreadsheet className="text-brand-600" size={20} />
+                  Lead Data
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">Manage, assign, and track all your incoming sheet leads.</p>
+             </div>
+
+             {/* My Leads / All Leads Toggle */}
+             <div className="bg-gray-100 p-1 rounded-lg inline-flex self-start">
+                <button
+                  onClick={() => setViewMode('all')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    viewMode === 'all' 
+                      ? 'bg-white text-gray-900 shadow-sm' 
+                      : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  <Layers size={14} />
+                  All Leads
+                </button>
+                <button
+                  onClick={() => setViewMode('mine')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    viewMode === 'mine' 
+                      ? 'bg-white text-brand-700 shadow-sm' 
+                      : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  <UserCheck size={14} />
+                  My Leads
+                </button>
+             </div>
           </div>
           
-          <div className="flex gap-2 w-full md:w-auto flex-wrap items-center">
+          <div className="flex gap-2 w-full md:w-auto flex-wrap items-center mt-2 md:mt-0">
             
             {/* Sheet Filter Dropdown */}
             <div className="relative">
@@ -102,21 +147,23 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
               />
             </div>
 
-            {/* Auto Assign Button */}
-            <button 
-              onClick={() => onAutoAssign(activeSheet)}
-              disabled={unassignedCount === 0 || salesPersons.length === 0}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors border whitespace-nowrap ${
-                unassignedCount > 0 && salesPersons.length > 0
-                  ? 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'
-                  : 'bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed'
-              }`}
-              title={`Distribute ${unassignedCount} unassigned leads from '${activeSheet}' equally among sales team`}
-            >
-               <UserPlus size={16} />
-               <span className="hidden sm:inline">Auto Assign</span>
-               {unassignedCount > 0 && <span className="ml-1 bg-white px-1.5 rounded-full text-xs border border-brand-200">{unassignedCount}</span>}
-            </button>
+            {/* Auto Assign Button (Only visible if showing 'All' and Admin generally, but kept for logic) */}
+            {viewMode === 'all' && (
+              <button 
+                onClick={() => onAutoAssign(activeSheet)}
+                disabled={unassignedCount === 0 || salesPersons.length === 0}
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors border whitespace-nowrap ${
+                  unassignedCount > 0 && salesPersons.length > 0
+                    ? 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'
+                    : 'bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed'
+                }`}
+                title={`Distribute ${unassignedCount} unassigned leads from '${activeSheet}' equally among sales team`}
+              >
+                 <UserPlus size={16} />
+                 <span className="hidden sm:inline">Auto Assign</span>
+                 {unassignedCount > 0 && <span className="ml-1 bg-white px-1.5 rounded-full text-xs border border-brand-200">{unassignedCount}</span>}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -135,10 +182,12 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white text-sm">
-            {filteredLeads.map((lead) => (
+            {filteredLeads.map((lead) => {
+              const isGreen = isTargetPincode(lead.postCode);
+              return (
               <tr 
                 key={lead.id} 
-                className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                className={`${isGreen ? 'bg-green-50/60 hover:bg-green-100/80' : 'hover:bg-blue-50/30'} transition-colors group cursor-pointer border-b border-gray-100`}
                 onClick={() => onSelectLead(lead)}
               >
                 <td className="px-4 py-3">
@@ -154,7 +203,9 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                 </td>
                 <td className="px-4 py-3">
                   <div className="text-gray-900 font-mono text-xs">{lead.phone}</div>
-                  <div className="text-xs text-gray-500 truncate max-w-[140px]" title={lead.address}>{lead.address}</div>
+                  <div className="text-xs text-gray-500 truncate max-w-[140px]" title={`${lead.address} ${lead.postCode}`}>
+                    {lead.address}{lead.postCode ? `, ${lead.postCode}` : ''}
+                  </div>
                 </td>
                 <td className="px-4 py-3 font-medium text-gray-900">{lead.avgBill}</td>
                 
@@ -165,7 +216,7 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                       value={lead.assignedTo || ''}
                       onChange={(e) => onUpdateLead(lead.id, { assignedTo: e.target.value })}
                       className={`block w-full max-w-[140px] pl-2 pr-6 py-1 text-xs border rounded shadow-sm appearance-none focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer ${
-                        lead.assignedTo ? 'bg-white border-gray-200 text-gray-900' : 'bg-gray-50 border-gray-200 text-gray-400 italic'
+                        lead.assignedTo ? 'bg-white border-gray-200 text-gray-900' : 'bg-transparent border-gray-300 text-gray-500 italic'
                       }`}
                     >
                       <option value="">Unassigned</option>
@@ -208,13 +259,14 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                   </button>
                 </td>
               </tr>
-            ))}
+            )})}
             {filteredLeads.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
                   <div className="flex flex-col items-center gap-2">
                     <Filter size={24} />
                     <p>No leads found matching your filters.</p>
+                    {viewMode === 'mine' && <p className="text-xs">You have no leads assigned yet.</p>}
                   </div>
                 </td>
               </tr>

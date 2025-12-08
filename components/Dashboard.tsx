@@ -1,7 +1,7 @@
 import React from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { Lead, DashboardMetrics } from '../types';
-import { FileText, MapPin, IndianRupee, TrendingUp } from 'lucide-react';
+import { FileText, MapPin, IndianRupee, TrendingUp, Calendar, Clock, Phone, Bell } from 'lucide-react';
 
 interface DashboardProps {
   leads: Lead[];
@@ -25,6 +25,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ leads, metrics }) => {
     { name: 'Advance', value: advanceCount },
     { name: 'Others', value: leads.length - (quoteCount + visitCount + advanceCount) }
   ].filter(d => d.value > 0);
+
+  // Calculate Upcoming Reminders (Next 7 Days)
+  const upcomingReminders = leads.filter(lead => {
+    if (!lead.nextReminder) return false;
+    const reminderDate = new Date(lead.nextReminder);
+    const now = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(now.getDate() + 7);
+    
+    // Check if valid date and within range (future but < 7 days)
+    // We allow reminders from slightly in the past (today) to show up as "due"
+    const isFutureOrToday = reminderDate.getTime() >= now.getTime() - (24 * 60 * 60 * 1000); 
+    return isFutureOrToday && reminderDate <= sevenDaysFromNow;
+  }).sort((a, b) => new Date(a.nextReminder!).getTime() - new Date(b.nextReminder!).getTime());
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -130,42 +155,90 @@ export const Dashboard: React.FC<DashboardProps> = ({ leads, metrics }) => {
         </div>
       </div>
 
-      {/* Empty State / Bottom Area */}
-      <div className="bg-blue-50/50 rounded-xl p-8 border border-blue-100 text-center">
-         <p className="text-gray-500 mb-2">
-           {quoteCount + visitCount + advanceCount === 0 
-             ? "No leads in Quotation sent, Site visit, or Advance payment statuses yet."
-             : "Your pipeline is active. Check the Kanban board to manage these deals."
-           }
-         </p>
-         <p className="text-xs text-gray-400">Leads will appear here once you move them to these stages.</p>
-      </div>
-
-      {/* Pipeline Chart */}
-       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-800 mb-6">Distribution</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+      {/* Bottom Row: Reminders & Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Upcoming Reminders Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[400px]">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <Bell className="text-brand-600" size={20} />
+              Upcoming Reminders
+            </h3>
+            <span className="bg-brand-50 text-brand-700 px-2.5 py-0.5 rounded-full text-xs font-bold">
+              Next 7 Days
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {upcomingReminders.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                <Calendar size={48} className="mb-2 opacity-20" />
+                <p className="text-sm">No reminders scheduled for this week.</p>
+              </div>
+            ) : (
+              upcomingReminders.map(lead => (
+                <div key={lead.id} className="flex items-start gap-4 p-4 rounded-lg bg-gray-50 border border-gray-100 hover:border-brand-200 transition-colors">
+                   <div className="bg-white p-2 rounded-lg text-center min-w-[60px] border border-gray-200 shadow-sm">
+                      <p className="text-xs font-bold text-gray-400 uppercase">{new Date(lead.nextReminder!).toLocaleString('default', { month: 'short' })}</p>
+                      <p className="text-xl font-bold text-brand-600">{new Date(lead.nextReminder!).getDate()}</p>
+                   </div>
+                   <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start">
+                         <h4 className="font-bold text-gray-900 truncate">{lead.name}</h4>
+                         <span className="text-[10px] bg-white border border-gray-200 px-2 py-0.5 rounded-full text-gray-500">
+                           {lead.sheetName}
+                         </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                        <Clock size={12} />
+                        <span className={new Date(lead.nextReminder!) < new Date() ? "text-red-500 font-semibold" : ""}>
+                          {new Date(lead.nextReminder!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-blue-600 mt-2">
+                        <Phone size={12} />
+                        <a href={`tel:${lead.phone}`} className="hover:underline">{lead.phone}</a>
+                      </div>
+                   </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
+
+        {/* Pipeline Chart */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-[400px]">
+          <h3 className="text-lg font-bold text-gray-800 mb-6">Pipeline Distribution</h3>
+          {chartData.length > 0 ? (
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+              No data to display
+            </div>
+          )}
+        </div>
+
+      </div>
 
     </div>
   );

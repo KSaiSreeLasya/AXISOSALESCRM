@@ -23,12 +23,41 @@ export const LEAD_STATUSES = [
   "Repeated"
 ];
 
+// Robust CSV Line Parser that handles quotes and commas correctly
+const parseCSVLine = (line: string): string[] => {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      // Handle escaped quotes ("") by looking ahead
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++; // Skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+};
+
 export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
   const lines = csvText.split(/\r?\n/);
   if (lines.length < 2) return [];
 
-  // Normalize headers to find columns loosely
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+  // Parse headers safely
+  const headerLine = lines[0];
+  const headers = parseCSVLine(headerLine).map(h => h.toLowerCase().replace(/^"|"$/g, ''));
   
   const result: Lead[] = [];
 
@@ -36,9 +65,7 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Regex to handle quoted CSV values properly
-    const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-    const values = matches ? matches.map(m => m.replace(/^"|"$/g, '')) : line.split(',');
+    const values = parseCSVLine(line);
 
     // Helper to extract value by possible header names
     const getVal = (keywords: string[], fallbackIndex: number) => {
@@ -47,7 +74,9 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
         index = headers.findIndex(h => h.includes(key));
         if (index !== -1) break;
       }
-      return values[index !== -1 ? index : fallbackIndex] || '';
+      // Clean up quotes just in case
+      const val = values[index !== -1 ? index : fallbackIndex] || '';
+      return val.replace(/^"|"$/g, '');
     };
 
     // Mapping based on the specific spreadsheet screenshot provided
@@ -57,7 +86,7 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
     const phone = getVal(['phone', 'mobile'], 3);
     const email = getVal(['email'], 4);
     const address = getVal(['street address', 'address'], 5);
-    const postCode = getVal(['post_code', 'zip', 'pin'], 6);
+    const postCode = getVal(['post_code', 'zip', 'pin', 'pincode', 'postal'], 6);
     const rawStatus = getVal(['lead_status', 'status'], 7);
     const extraNotes = getVal(['notes', 'comment'], 8); // Sometimes extra columns exist
 
@@ -70,12 +99,13 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
     
     // Normalize status to match our dropdown if possible, otherwise keep raw
     let status = rawStatus || 'New';
+    // Capitalize first letter
     status = status.charAt(0).toUpperCase() + status.slice(1);
 
     const initialNotes: Note[] = [];
     if (extraNotes) {
       initialNotes.push({
-        id: `note-init-${i}`,
+        id: `note-init-${sheetName}-${i}`,
         content: extraNotes,
         timestamp: new Date().toISOString(),
         author: 'Import'
@@ -83,7 +113,7 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
     }
 
     result.push({
-      id: `${sheetName}-${i}`,
+      id: `${sheetName}-${i}`, // Stable ID based on sheet row
       sheetName,
       rowNumber: i + 1,
       propertyType: propertyType || 'Individual House',
@@ -101,7 +131,7 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
       nextReminder: '',
       assignedTo: undefined,
       activityLog: [{
-        id: `init-${i}`,
+        id: `init-${sheetName}-${i}`,
         timestamp: new Date().toISOString(),
         type: 'status_change',
         description: 'Lead imported from Google Sheet',

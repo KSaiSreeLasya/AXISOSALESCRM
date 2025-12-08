@@ -1,5 +1,12 @@
 export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost' | 'Call Back' | 'Not Connected' | 'Busy' | 'Not lifted' | 'Voice Message' | 'Quotation sent' | 'Site visit' | 'Advance payment' | 'Lead finished' | 'repeated';
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'salesperson';
+}
+
 export interface SalesPerson {
   id: string;
   name: string;
