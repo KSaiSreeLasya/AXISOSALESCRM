@@ -183,8 +183,39 @@ const App: React.FC = () => {
           if (sheetLeads.length > 0) {
             setSyncStatus(`Syncing ${sheetLeads.length} records for ${tab.name}...`);
             
-            // 1. Upsert Leads
-            const dbLeads = sheetLeads.map(mapLeadToDB);
+            // --- MERGE LOGIC START ---
+            // Fetch existing data from DB to preserve Assigned To, Status, etc.
+            const { data: existingRows, error: fetchError } = await supabase
+                .from('leads')
+                .select('id, status, assigned_to, next_reminder, last_contact')
+                .eq('sheet_name', tab.name);
+            
+            if (fetchError) console.error('Error fetching existing leads for merge:', fetchError);
+
+            // Create a map for fast lookup
+            // Explicitly cast existing rows to any to allow property access
+            const existingMap = new Map((existingRows || []).map((r: any) => [r.id, r]));
+
+            // Merge CSV data with DB data
+            const mergedLeads = sheetLeads.map(lead => {
+                const existing = existingMap.get(lead.id);
+                if (existing) {
+                    return {
+                        ...lead,
+                        // Preserve CRM fields from DB if they exist. 
+                        // If DB value is null/undefined, fallback to what's in CSV (which is usually default 'New' or 'Unassigned')
+                        status: existing.status ?? lead.status, 
+                        assignedTo: existing.assigned_to ?? lead.assignedTo,
+                        nextReminder: existing.next_reminder ?? lead.nextReminder
+                        // We do NOT overwrite name/phone/bill from DB, we let the Sheet update those (Sheet is master for contact info)
+                    };
+                }
+                return lead;
+            });
+            // --- MERGE LOGIC END ---
+
+            // 1. Upsert Leads (using merged data)
+            const dbLeads = mergedLeads.map(mapLeadToDB);
             
             // Using upsert. Ensure RLS policies allow 'insert' and 'update' for anon if not using auth
             const { error: upsertError } = await supabase
@@ -197,6 +228,8 @@ const App: React.FC = () => {
             }
 
             // 2. Insert Initial Notes & Logs
+            // We only want to insert initial notes if they are NEW. 
+            // 'upsert' with ignoreDuplicates: true will handle this based on ID.
             const initialNotes = sheetLeads.flatMap(l => 
               l.notes.map(n => ({ 
                 id: n.id, lead_id: l.id, content: n.content, timestamp: n.timestamp, author: n.author 
