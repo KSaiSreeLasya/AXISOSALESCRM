@@ -7,15 +7,7 @@ export default defineConfig({
   build: {
     // Output to dist/spa for Render Static Site
     outDir: 'dist/spa',
-    emptyOutDir: true,
-    // Standard rollup options (bundling everything)
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'recharts', '@supabase/supabase-js']
-        }
-      }
-    }
+    emptyOutDir: true
   },
   server: {
     port: 3000,
