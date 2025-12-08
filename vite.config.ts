@@ -8,17 +8,13 @@ export default defineConfig({
     // Output to dist/spa for Render Static Site
     outDir: 'dist/spa',
     emptyOutDir: true,
+    // Standard rollup options (bundling everything)
     rollupOptions: {
-      // Externalize these libraries so Vite doesn't try to bundle them.
-      // This fixes the "failed to resolve react-is" error.
-      external: [
-        'react',
-        'react-dom',
-        'recharts',
-        '@google/genai',
-        '@supabase/supabase-js',
-        'lucide-react'
-      ]
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'recharts', '@supabase/supabase-js']
+        }
+      }
     }
   },
   server: {
