@@ -27,24 +27,38 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
     ...leads.map(l => l.sheetName)
   ]));
 
-  const filteredLeads = leads.filter(lead => {
-    // 1. Text Search
-    const matchesSearch = 
-      lead.name.toLowerCase().includes(search.toLowerCase()) || 
-      lead.phone.includes(search) ||
-      lead.address.toLowerCase().includes(search.toLowerCase()) ||
-      lead.postCode.includes(search);
-    
-    // 2. Sheet Filter
-    const matchesSheet = activeSheet === 'All' || lead.sheetName === activeSheet;
-    
-    // 3. Status Filter
-    const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
+  // Base filter (Search + Sheet + Status) - applied before splitting into "All" vs "Mine"
+  const getBaseFilteredLeads = () => {
+    return leads.filter(lead => {
+      // 1. Text Search
+      const matchesSearch = 
+        lead.name.toLowerCase().includes(search.toLowerCase()) || 
+        lead.phone.includes(search) ||
+        lead.address.toLowerCase().includes(search.toLowerCase()) ||
+        lead.postCode.includes(search);
+      
+      // 2. Sheet Filter
+      const matchesSheet = activeSheet === 'All' || lead.sheetName === activeSheet;
+      
+      // 3. Status Filter
+      const matchesStatus = statusFilter === 'All' || lead.status === statusFilter;
 
-    // 4. My Leads Filter
-    const matchesOwner = viewMode === 'all' ? true : lead.assignedTo === currentUser.id;
+      return matchesSearch && matchesSheet && matchesStatus;
+    });
+  };
 
-    return matchesSearch && matchesSheet && matchesStatus && matchesOwner;
+  const baseLeads = getBaseFilteredLeads();
+  
+  // Calculate counts based on the current filters
+  const allLeadsCount = baseLeads.length;
+  const myLeadsCount = baseLeads.filter(l => l.assignedTo === currentUser.id).length;
+
+  // Apply the final View Mode filter for the table display
+  const displayLeads = baseLeads.filter(lead => {
+    if (viewMode === 'mine') {
+      return lead.assignedTo === currentUser.id;
+    }
+    return true;
   });
 
   const getStatusColor = (status: string) => {
@@ -63,7 +77,7 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
     return !isNaN(cleanPin) && cleanPin >= 500001 && cleanPin <= 509412;
   };
 
-  const unassignedCount = filteredLeads.filter(l => !l.assignedTo).length;
+  const unassignedCount = displayLeads.filter(l => !l.assignedTo).length;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -92,6 +106,9 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                 >
                   <Layers size={14} />
                   All Leads
+                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${viewMode === 'all' ? 'bg-gray-100 text-gray-700' : 'bg-white text-gray-500'}`}>
+                    {allLeadsCount}
+                  </span>
                 </button>
                 <button
                   onClick={() => setViewMode('mine')}
@@ -103,6 +120,9 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                 >
                   <UserCheck size={14} />
                   My Leads
+                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${viewMode === 'mine' ? 'bg-brand-50 text-brand-700' : 'bg-white text-gray-500'}`}>
+                    {myLeadsCount}
+                  </span>
                 </button>
              </div>
           </div>
@@ -182,7 +202,7 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white text-sm">
-            {filteredLeads.map((lead) => {
+            {displayLeads.map((lead) => {
               const isGreen = isTargetPincode(lead.postCode);
               return (
               <tr 
@@ -260,7 +280,7 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                 </td>
               </tr>
             )})}
-            {filteredLeads.length === 0 && (
+            {displayLeads.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
                   <div className="flex flex-col items-center gap-2">

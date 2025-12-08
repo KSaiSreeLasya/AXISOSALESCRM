@@ -194,7 +194,7 @@ const App: React.FC = () => {
 
             // Create a map for fast lookup
             // Explicitly cast existing rows to any to allow property access
-            const existingMap = new Map((existingRows || []).map((r: any) => [r.id, r]));
+            const existingMap = new Map<string, any>((existingRows || []).map((r: any) => [r.id, r]));
 
             // Merge CSV data with DB data
             const mergedLeads = sheetLeads.map(lead => {
