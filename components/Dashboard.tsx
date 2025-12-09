@@ -14,7 +14,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ leads, metrics }) => {
   
   // Specific counters for the requested cards
   const quoteCount = leads.filter(l => l.status === 'Quotation sent').length;
-  const visitCount = leads.filter(l => l.status === 'Site visit').length;
+  // Count anything containing "site visit" (case insensitive match for safety, though typically "Site visit")
+  const visitCount = leads.filter(l => l.status.toLowerCase().includes('site visit')).length;
   const advanceCount = leads.filter(l => l.status === 'Advance payment').length;
 
   const total = leads.length || 1; // avoid divide by zero

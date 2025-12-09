@@ -1,4 +1,4 @@
-export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost' | 'Call Back' | 'Not Connected' | 'Busy' | 'Not lifted' | 'Voice Message' | 'Quotation sent' | 'Site visit' | 'Advance payment' | 'Lead finished' | 'repeated';
+export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost' | 'Call Back' | 'Not Connected' | 'Busy' | 'Not lifted' | 'Voice Message' | 'Quotation sent' | 'Site visit' | 'Site Visit - Done' | 'Site Visit - Not Done' | 'Advance payment' | 'Lead finished' | 'repeated';
 
 export interface User {
   id: string;

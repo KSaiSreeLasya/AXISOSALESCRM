@@ -38,7 +38,13 @@ export const Kanban: React.FC<KanbanProps> = ({ leads, onUpdateLead }) => {
     <div className="flex gap-6 overflow-x-auto pb-4 h-full p-2">
       {COLUMNS.map(col => {
         // Filter leads exactly matching these statuses
-        const columnLeads = leads.filter(l => l.status === col.id);
+        // For Site Visit, we include "Site Visit", "Site Visit - Done", "Site Visit - Not Done"
+        const columnLeads = leads.filter(l => {
+          if (col.id === 'Site visit') {
+            return l.status.toLowerCase().includes('site visit');
+          }
+          return l.status === col.id;
+        });
         
         return (
           <div 
@@ -70,6 +76,19 @@ export const Kanban: React.FC<KanbanProps> = ({ leads, onUpdateLead }) => {
 
                   <h4 className="font-semibold text-gray-900 text-sm mb-1">{lead.name}</h4>
                   
+                  {/* Show sub-status badge if it differs from the column ID (e.g. "Done") */}
+                  {col.id === 'Site visit' && lead.status !== 'Site visit' && (
+                    <div className="mb-2">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                        lead.status.includes('Done') && !lead.status.includes('Not') 
+                          ? 'bg-green-50 text-green-700 border-green-200' 
+                          : 'bg-red-50 text-red-700 border-red-200'
+                      }`}>
+                        {lead.status.replace('Site Visit - ', '')}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
                     <MapPin size={12} className="shrink-0" />
                     <span className="truncate">{lead.address || 'No Address'}</span>

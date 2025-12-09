@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2, UserCheck, Layers } from 'lucide-react';
+import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2, UserCheck, Layers, Plus } from 'lucide-react';
 import { Lead, SalesPerson, SheetTab, User } from '../types';
 import { LEAD_STATUSES } from '../utils/helpers';
+import { AddLeadModal } from './AddLeadModal';
 
 interface LeadListProps {
   leads: Lead[];
@@ -12,13 +13,15 @@ interface LeadListProps {
   onAutoAssign: (sheetScope: string) => void;
   onSelectLead: (lead: Lead) => void;
   onDeleteLead: (leadId: string) => void;
+  onAddLead: (lead: Lead) => Promise<void>;
 }
 
-export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPersons, currentUser, onUpdateLead, onAutoAssign, onSelectLead, onDeleteLead }) => {
+export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPersons, currentUser, onUpdateLead, onAutoAssign, onSelectLead, onDeleteLead, onAddLead }) => {
   const [search, setSearch] = useState('');
   const [activeSheet, setActiveSheet] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
+  const [isAddingLead, setIsAddingLead] = useState(false);
 
   // Combine configured tabs with any other sheet names found in leads
   const availableSheets = Array.from(new Set([
@@ -34,8 +37,8 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
       const matchesSearch = 
         lead.name.toLowerCase().includes(search.toLowerCase()) || 
         lead.phone.includes(search) ||
-        lead.address.toLowerCase().includes(search.toLowerCase()) ||
-        lead.postCode.includes(search);
+        (lead.address && lead.address.toLowerCase().includes(search.toLowerCase())) ||
+        (lead.postCode && lead.postCode.includes(search));
       
       // 2. Sheet Filter
       const matchesSheet = activeSheet === 'All' || lead.sheetName === activeSheet;
@@ -63,7 +66,14 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase();
-    if (s.includes('won') || s.includes('visit') || s.includes('advance')) return 'bg-green-100 text-green-700 border-green-200';
+    
+    // Site Visit Logic
+    if (s.includes('site visit')) {
+        if (s.includes('not done')) return 'bg-red-100 text-red-700 border-red-200';
+        return 'bg-green-100 text-green-700 border-green-200'; // "Done" or generic "Site visit"
+    }
+
+    if (s.includes('won') || s.includes('advance')) return 'bg-green-100 text-green-700 border-green-200';
     if (s.includes('lost') || s.includes('not connected')) return 'bg-red-100 text-red-700 border-red-200';
     if (s.includes('call') || s.includes('busy') || s.includes('voice')) return 'bg-orange-100 text-orange-700 border-orange-200';
     if (s.includes('quotation') || s.includes('contacted')) return 'bg-blue-100 text-blue-700 border-blue-200';
@@ -86,12 +96,22 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
       <div className="p-4 border-b border-gray-100 flex flex-col gap-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex flex-col gap-3">
-             <div>
-                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <FileSpreadsheet className="text-brand-600" size={20} />
-                  Lead Data
-                </h2>
-                <p className="text-xs text-gray-500 mt-1">Manage, assign, and track all your incoming sheet leads.</p>
+             <div className="flex items-center gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <FileSpreadsheet className="text-brand-600" size={20} />
+                    Lead Data
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1">Manage, assign, and track all your incoming sheet leads.</p>
+                </div>
+                
+                {/* Add Lead Button */}
+                <button 
+                  onClick={() => setIsAddingLead(true)}
+                  className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg hover:bg-brand-700 shadow-sm transition-colors"
+                >
+                  <Plus size={14} /> Add Lead
+                </button>
              </div>
 
              {/* My Leads / All Leads Toggle */}
@@ -129,6 +149,14 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
           
           <div className="flex gap-2 w-full md:w-auto flex-wrap items-center mt-2 md:mt-0">
             
+            {/* Mobile Add Lead Button */}
+            <button 
+              onClick={() => setIsAddingLead(true)}
+              className="md:hidden flex items-center gap-2 px-3 py-2 bg-brand-600 text-white text-sm font-bold rounded-lg hover:bg-brand-700 shadow-sm"
+            >
+              <Plus size={16} /> Add
+            </button>
+
             {/* Sheet Filter Dropdown */}
             <div className="relative">
                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -167,7 +195,7 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
               />
             </div>
 
-            {/* Auto Assign Button (Only visible if showing 'All' and Admin generally, but kept for logic) */}
+            {/* Auto Assign Button */}
             {viewMode === 'all' && (
               <button 
                 onClick={() => onAutoAssign(activeSheet)}
@@ -294,6 +322,16 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
           </tbody>
         </table>
       </div>
+
+      {/* Add Lead Modal */}
+      {isAddingLead && (
+        <AddLeadModal 
+          salesPersons={salesPersons}
+          sheetTabs={sheetTabs}
+          onClose={() => setIsAddingLead(false)} 
+          onSave={onAddLead} 
+        />
+      )}
     </div>
   );
 };

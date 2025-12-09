@@ -39,7 +39,14 @@ export const LeadDetailModal: React.FC<LeadDetailModalProps> = ({ lead, salesPer
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase();
-    if (s.includes('won') || s.includes('visit')) return 'text-green-600 bg-green-50 border-green-200';
+
+    // Site Visit Logic
+    if (s.includes('site visit')) {
+        if (s.includes('not done')) return 'text-red-600 bg-red-50 border-red-200';
+        return 'text-green-600 bg-green-50 border-green-200';
+    }
+
+    if (s.includes('won')) return 'text-green-600 bg-green-50 border-green-200';
     if (s.includes('lost') || s.includes('not')) return 'text-red-600 bg-red-50 border-red-200';
     return 'text-blue-600 bg-blue-50 border-blue-200';
   };

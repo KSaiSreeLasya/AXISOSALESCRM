@@ -14,6 +14,8 @@ export const LEAD_STATUSES = [
   "Voice Message",
   "Quotation sent",
   "Site visit",
+  "Site Visit - Done",
+  "Site Visit - Not Done",
   "Advance payment",
   "Lead finished",
   "Contacted",

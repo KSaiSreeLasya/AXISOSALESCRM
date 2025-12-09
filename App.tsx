@@ -6,6 +6,7 @@ import { Kanban } from './components/Kanban';
 import { SalesTeam } from './components/SalesTeam';
 import { LeadDetailModal } from './components/LeadDetailModal';
 import { Login } from './components/Login';
+import { ConfirmationModal } from './components/ConfirmationModal';
 import { Lead, SheetConfig, DashboardMetrics, SalesPerson, ActivityLogEntry, Note, User } from './types';
 import { parseCSV, MOCK_DATA } from './utils/helpers';
 import { analyzeLead } from './services/geminiService';
@@ -42,6 +43,9 @@ const App: React.FC = () => {
   
   // Selected Lead for Detail Modal
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  
+  // Delete Confirmation State
+  const [leadToDelete, setLeadToDelete] = useState<string | null>(null);
 
   // Sales Team State
   const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
@@ -279,6 +283,50 @@ const App: React.FC = () => {
     }
   }, [config, fetchData]);
 
+  // Handle Adding Manual Lead
+  const handleAddLead = async (newLead: Lead) => {
+    try {
+      // 1. Insert Lead into DB
+      const dbLead = mapLeadToDB(newLead);
+      const { error: leadError } = await supabase.from('leads').insert(dbLead);
+      if (leadError) throw leadError;
+
+      // 2. Insert Notes (if any)
+      if (newLead.notes.length > 0) {
+        const dbNotes = newLead.notes.map(n => ({
+          id: n.id,
+          lead_id: newLead.id,
+          content: n.content,
+          timestamp: n.timestamp,
+          author: n.author
+        }));
+        const { error: noteError } = await supabase.from('notes').insert(dbNotes);
+        if (noteError) console.error("Error inserting manual note", noteError);
+      }
+
+      // 3. Insert Activity Log
+      if (newLead.activityLog && newLead.activityLog.length > 0) {
+        const dbLogs = newLead.activityLog.map(l => ({
+          id: l.id,
+          lead_id: newLead.id,
+          type: l.type,
+          description: l.description,
+          timestamp: l.timestamp,
+          author: l.author
+        }));
+        const { error: logError } = await supabase.from('activity_logs').insert(dbLogs);
+        if (logError) console.error("Error inserting manual log", logError);
+      }
+      
+      // 4. Update local state
+      setLeads(prev => [newLead, ...prev]);
+
+    } catch (err: any) {
+      console.error("Failed to add lead", err);
+      alert(`Error creating lead: ${err.message}`);
+    }
+  };
+
   // Handle updates to lead (Status, Assignment, Notes)
   const handleUpdateLead = async (leadId: string, updates: Partial<Lead>) => {
     // 1. Optimistic Update
@@ -385,20 +433,37 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteLead = async (leadId: string) => {
-    if (window.confirm('Are you sure you want to delete this lead?')) {
-      // Optimistic delete
-      setLeads(prev => prev.filter(l => l.id !== leadId));
-      if (selectedLead?.id === leadId) setSelectedLead(null);
+  // Trigger Confirmation Modal
+  const requestDeleteLead = (leadId: string) => {
+    setLeadToDelete(leadId);
+  };
 
-      try {
-        const { error } = await supabase.from('leads').delete().eq('id', leadId);
-        if (error) throw error;
-      } catch (err: any) {
-        console.error("Delete failed", err);
-        alert(`Delete failed: ${err.message}`);
-        fetchData(); // Revert
+  // Actual Delete Logic triggered by Modal
+  const confirmDeleteLead = async () => {
+    if (!leadToDelete) return;
+    const leadId = leadToDelete;
+
+    // Optimistic delete
+    setLeads(prev => prev.filter(l => l.id !== leadId));
+    if (selectedLead?.id === leadId) setSelectedLead(null);
+    setLeadToDelete(null); // Close modal
+
+    try {
+      // 1. Delete Related Data First (Manual Cascade) to prevent FK errors
+      await supabase.from('notes').delete().eq('lead_id', leadId);
+      await supabase.from('activity_logs').delete().eq('lead_id', leadId);
+
+      // 2. Delete the Lead
+      const { error } = await supabase.from('leads').delete().eq('id', leadId);
+      
+      if (error) {
+         console.error("Supabase Delete Error:", error);
+         throw error;
       }
+    } catch (err: any) {
+      console.error("Delete failed", err);
+      alert(`Delete failed: ${err.message}`);
+      fetchData(); // Revert state from DB if failed
     }
   };
 
@@ -587,7 +652,8 @@ const App: React.FC = () => {
                 onUpdateLead={handleUpdateLead}
                 onAutoAssign={handleAutoAssign}
                 onSelectLead={setSelectedLead}
-                onDeleteLead={handleDeleteLead}
+                onDeleteLead={requestDeleteLead}
+                onAddLead={handleAddLead}
             />
           )}
 
@@ -673,6 +739,18 @@ const App: React.FC = () => {
           salesPersons={salesPersons}
           onClose={() => setSelectedLead(null)} 
           onUpdate={handleUpdateLead} 
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {leadToDelete && (
+        <ConfirmationModal
+          title="Delete Lead"
+          message="Are you sure you want to delete this lead? This action cannot be undone and will remove all associated notes and history."
+          isDangerous={true}
+          confirmText="Delete Lead"
+          onCancel={() => setLeadToDelete(null)}
+          onConfirm={confirmDeleteLead}
         />
       )}
 
