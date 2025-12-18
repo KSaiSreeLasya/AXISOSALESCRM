@@ -24,11 +24,16 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
   const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
   const [isAddingLead, setIsAddingLead] = useState(false);
 
+  // Source of truth for sheets is the active configuration + "Manual Entry"
   const availableSheets = Array.from(new Set([
     'All', 
     ...sheetTabs.map(t => t.name),
-    ...leads.map(l => l.sheetName)
-  ]));
+    'Manual Entry'
+  ])).sort((a, b) => {
+    if (a === 'All') return -1;
+    if (b === 'All') return 1;
+    return a.localeCompare(b);
+  });
 
   const getBaseFilteredLeads = () => {
     return leads.filter(lead => {
@@ -213,6 +218,13 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                 </td>
               </tr>
             )})}
+            {displayLeads.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+                   No leads found matching current filters.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

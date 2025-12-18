@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, Users, KanbanSquare, Settings, RefreshCw, X, Sparkles, ShieldCheck, LogOut, Zap } from 'lucide-react';
+import { LayoutDashboard, Users, KanbanSquare, Settings, RefreshCw, X, Sparkles, ShieldCheck, LogOut, Zap, Trash2 } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { LeadList } from './components/LeadList';
 import { Kanban } from './components/Kanban';
@@ -8,7 +8,7 @@ import { SalesTeam } from './components/SalesTeam';
 import { LeadDetailModal } from './components/LeadDetailModal';
 import { Login } from './components/Login';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { Lead, SheetConfig, DashboardMetrics, SalesPerson, ActivityLogEntry, Note, User } from './types';
+import { Lead, SheetConfig, DashboardMetrics, SalesPerson, ActivityLogEntry, Note, User, SheetTab } from './types';
 import { parseCSV, MOCK_DATA } from './utils/helpers';
 import { analyzeLead } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
@@ -47,6 +47,7 @@ const App: React.FC = () => {
   
   // Delete Confirmation State
   const [leadToDelete, setLeadToDelete] = useState<string | null>(null);
+  const [sheetToRemove, setSheetToRemove] = useState<SheetTab | null>(null);
 
   // Sales Team State
   const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
@@ -56,15 +57,23 @@ const App: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analyzingLead, setAnalyzingLead] = useState<Lead | null>(null);
 
-  // Computed Metrics
+  // Filter leads based on active tabs in config + Manual entries
+  const activeLeads = React.useMemo(() => {
+    return leads.filter(l => 
+      config.tabs.some(t => t.name.toLowerCase() === l.sheetName.toLowerCase()) || 
+      l.sheetName === 'Manual Entry'
+    );
+  }, [leads, config.tabs]);
+
+  // Computed Metrics based on active leads only
   const metrics: DashboardMetrics = React.useMemo(() => {
     return {
-      totalLeads: leads.length,
-      totalValue: leads.reduce((acc, l) => acc + l.value, 0),
-      wonLeads: leads.filter(l => l.status.toLowerCase().includes('won') || l.status.toLowerCase().includes('visit')).length,
-      conversionRate: leads.length ? (leads.filter(l => l.status.toLowerCase().includes('won')).length / leads.length) * 100 : 0
+      totalLeads: activeLeads.length,
+      totalValue: activeLeads.reduce((acc, l) => acc + l.value, 0),
+      wonLeads: activeLeads.filter(l => l.status.toLowerCase().includes('won') || l.status.toLowerCase().includes('visit')).length,
+      conversionRate: activeLeads.length ? (activeLeads.filter(l => l.status.toLowerCase().includes('won')).length / activeLeads.length) * 100 : 0
     };
-  }, [leads]);
+  }, [activeLeads]);
 
   // Handle Login
   const handleLogin = async (email: string, pass: string) => {
@@ -335,7 +344,7 @@ const App: React.FC = () => {
 
   const handleAutoAssign = async (sheetScope: string) => {
     if (salesPersons.length === 0) return;
-    const unassignedLeads = leads.filter(l => 
+    const unassignedLeads = activeLeads.filter(l => 
         (sheetScope === 'All' || l.sheetName === sheetScope) && !l.assignedTo
     );
 
@@ -396,11 +405,42 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleRemoveSheet = (gid: string) => {
-    setConfig(prev => ({
-      ...prev,
-      tabs: prev.tabs.filter(t => t.gid !== gid)
-    }));
+  const requestRemoveSheet = (tab: SheetTab) => {
+    setSheetToRemove(tab);
+  };
+
+  const confirmRemoveSheet = async () => {
+    if (!sheetToRemove) return;
+    const targetName = sheetToRemove.name;
+    const targetGid = sheetToRemove.gid;
+
+    setIsLoading(true);
+    try {
+        // 1. Delete associated data from Supabase for this sheet name
+        const { data: leadIds } = await supabase.from('leads').select('id').eq('sheet_name', targetName);
+        if (leadIds && leadIds.length > 0) {
+            const ids = leadIds.map(l => l.id);
+            await supabase.from('notes').delete().in('lead_id', ids);
+            await supabase.from('activity_logs').delete().in('lead_id', ids);
+            await supabase.from('leads').delete().eq('sheet_name', targetName);
+        }
+
+        // 2. Update local config
+        setConfig(prev => ({
+          ...prev,
+          tabs: prev.tabs.filter(t => t.gid !== targetGid)
+        }));
+
+        // 3. Filter local leads state
+        setLeads(prev => prev.filter(l => l.sheetName !== targetName));
+        
+    } catch (err) {
+        console.error("Error removing sheet and data:", err);
+        alert("Failed to purge data for this sheet. Check console.");
+    } finally {
+        setIsLoading(false);
+        setSheetToRemove(null);
+    }
   };
 
   const handleAddSalesPerson = async (member: SalesPerson) => {
@@ -536,10 +576,10 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 overflow-auto p-4 md:p-6 scrollbar-hide bg-gray-50/50">
-          {currentView === 'dashboard' && <Dashboard leads={leads} metrics={metrics} />}
+          {currentView === 'dashboard' && <Dashboard leads={activeLeads} metrics={metrics} />}
           {currentView === 'leads' && (
             <LeadList 
-                leads={leads} 
+                leads={activeLeads} 
                 sheetTabs={config.tabs}
                 salesPersons={salesPersons}
                 currentUser={currentUser}
@@ -550,7 +590,7 @@ const App: React.FC = () => {
                 onAddLead={handleAddLead}
             />
           )}
-          {currentView === 'kanban' && <Kanban leads={leads} onUpdateLead={handleUpdateLead} />}
+          {currentView === 'kanban' && <Kanban leads={activeLeads} onUpdateLead={handleUpdateLead} />}
           {currentView === 'team' && (
             <SalesTeam 
                 currentUser={currentUser}
@@ -570,9 +610,12 @@ const App: React.FC = () => {
                  </div>
                  <div>
                    <label className="block text-sm font-medium text-gray-700 mb-3">Active Sheets (Months)</label>
+                   <p className="text-xs text-amber-600 mb-3 bg-amber-50 p-2 rounded border border-amber-100 flex items-center gap-2 font-medium">
+                      <Zap size={14} /> Note: Removing a sheet will purge all its associated leads from the database.
+                   </p>
                    <div className="space-y-3">
                      {config.tabs.map(tab => (
-                       <div key={tab.gid} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                       <div key={tab.gid} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200 group">
                          <div className="flex-1 grid grid-cols-2 gap-4">
                            <div>
                              <span className="text-xs text-gray-400 uppercase font-bold">Sheet Name</span>
@@ -584,11 +627,11 @@ const App: React.FC = () => {
                            </div>
                          </div>
                          <button 
-                           onClick={() => handleRemoveSheet(tab.gid)}
-                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-white rounded-md transition-colors"
-                           title="Remove Sheet"
+                           onClick={() => requestRemoveSheet(tab)}
+                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all group-hover:scale-110"
+                           title="Remove Sheet & Purge Data"
                          >
-                           <X size={16} />
+                           <Trash2 size={16} />
                          </button>
                        </div>
                      ))}
@@ -611,7 +654,7 @@ const App: React.FC = () => {
                     >
                       <input name="name" placeholder="Name (e.g. January)" className="flex-1 px-3 py-2 border rounded-lg text-sm" required />
                       <input name="gid" placeholder="GID (e.g. 123456)" className="w-32 px-3 py-2 border rounded-lg text-sm font-mono" required />
-                      <button type="submit" className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black">Add</button>
+                      <button type="submit" className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black transition-colors shadow-sm">Add</button>
                     </form>
                  </div>
                </div>
@@ -637,6 +680,17 @@ const App: React.FC = () => {
           confirmText="Delete Lead"
           onCancel={() => setLeadToDelete(null)}
           onConfirm={confirmDeleteLead}
+        />
+      )}
+
+      {sheetToRemove && (
+        <ConfirmationModal
+          title={`Remove ${sheetToRemove.name}?`}
+          message={`Are you sure you want to remove the ${sheetToRemove.name} configuration? This will PERMANENTLY delete all leads, notes, and records imported from this sheet.`}
+          isDangerous={true}
+          confirmText="Remove & Purge"
+          onCancel={() => setSheetToRemove(null)}
+          onConfirm={confirmRemoveSheet}
         />
       )}
 
