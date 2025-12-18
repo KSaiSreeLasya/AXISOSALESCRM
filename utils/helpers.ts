@@ -1,3 +1,4 @@
+
 import { Lead, Note } from '../types';
 
 export const formatCurrency = (value: number) => {
@@ -81,7 +82,7 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
       return val.replace(/^"|"$/g, '');
     };
 
-    // Mapping based on the specific spreadsheet screenshot provided
+    // Mapping based on the specific spreadsheet structure
     const propertyType = getVal(['type_of_property', 'property'], 0);
     const avgBill = getVal(['average_monthly', 'bill', 'electricity'], 1);
     const name = getVal(['full name', 'name'], 2);
@@ -90,18 +91,14 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
     const address = getVal(['street address', 'address'], 5);
     const postCode = getVal(['post_code', 'zip', 'pin', 'pincode', 'postal'], 6);
     const rawStatus = getVal(['lead_status', 'status'], 7);
-    const extraNotes = getVal(['notes', 'comment'], 8); // Sometimes extra columns exist
+    const extraNotes = getVal(['notes', 'comment'], 8); 
 
-    // Skip empty rows (must have at least a name or phone)
     if (!name && !phone) continue;
 
-    // Estimate deal value based on Bill amount
     const billNum = parseFloat(avgBill.replace(/[^0-9.]/g, '')) || 0;
     const estimatedValue = billNum > 0 ? billNum * 50 : 50000; 
     
-    // Normalize status to match our dropdown if possible, otherwise keep raw
     let status = rawStatus || 'New';
-    // Capitalize first letter
     status = status.charAt(0).toUpperCase() + status.slice(1);
 
     const initialNotes: Note[] = [];
@@ -115,7 +112,7 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
     }
 
     result.push({
-      id: `${sheetName}-${i}`, // Stable ID based on sheet row
+      id: `${sheetName}-${i}`, 
       sheetName,
       rowNumber: i + 1,
       propertyType: propertyType || 'Individual House',
@@ -123,12 +120,13 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
       name: name,
       phone: phone,
       email: email,
-      company: 'N/A', // Default
+      company: 'N/A',
       address: address,
       postCode: postCode,
       status: status,
       value: estimatedValue,
       lastContact: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
       notes: initialNotes,
       nextReminder: '',
       assignedTo: undefined,
@@ -145,13 +143,13 @@ export const parseCSV = (csvText: string, sheetName: string): Lead[] => {
   return result;
 };
 
-// Mock data updated to match new structure
 export const MOCK_DATA: Lead[] = [
   { 
     id: 'mock-1', sheetName: 'Demo Sheet', rowNumber: 1,
     propertyType: 'Individual House', avgBill: '2500', name: 'Gottipati Amith', phone: '919390741922', 
     email: 'gottipatiamith@gmail.com', address: 'Ae/52 Hill Colony', postCode: '508202', 
     status: 'Call Back', value: 125000, lastContact: '2023-11-01', 
+    createdAt: '2023-11-01T09:00:00Z',
     notes: [{ id: 'n1', content: 'Customer asked to call back in evening', timestamp: '2023-11-01T10:00:00Z', author: 'System' }], 
     nextReminder: '',
     activityLog: []

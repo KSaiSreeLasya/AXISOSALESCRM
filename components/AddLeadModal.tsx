@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { X, User, Phone, Mail, MapPin, Calendar, Users, FileText, Save, FolderOpen } from 'lucide-react';
+import { X, User, Phone, Mail, MapPin, Calendar, Users, FileText, Save, FolderOpen, Clock } from 'lucide-react';
 import { Lead, SalesPerson, Note, SheetTab } from '../types';
 
 interface AddLeadModalProps {
@@ -29,43 +30,42 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ salesPersons, sheetT
     if (!formData.name || !formData.phone) return;
 
     setLoading(true);
-
-    // Create unique ID for manual entry
     const timestamp = Date.now();
+    const isoString = new Date().toISOString();
     const id = `manual-${timestamp}`;
 
-    // Construct Note object if note exists
     const notes: Note[] = [];
     if (formData.note.trim()) {
       notes.push({
         id: `note-${timestamp}`,
         content: formData.note,
-        timestamp: new Date().toISOString(),
-        author: 'User' // Ideally current user name
+        timestamp: isoString,
+        author: 'User'
       });
     }
 
     const newLead: Lead = {
       id,
-      sheetName: formData.sheetName, // Use selected sheet name
-      rowNumber: 0, // 0 indicates manual
+      sheetName: formData.sheetName,
+      rowNumber: 0,
       name: formData.name,
       phone: formData.phone,
       email: formData.email,
       address: formData.address,
-      postCode: '', // Optional or extracted from address if needed
+      postCode: '',
       propertyType: formData.propertyType,
       avgBill: formData.avgBill || '0',
       status: 'New',
-      value: 0, // Could calculate based on bill
+      value: 0,
       company: 'N/A',
-      lastContact: new Date().toISOString(),
+      lastContact: isoString,
+      createdAt: isoString,
       nextReminder: formData.nextReminder,
       assignedTo: formData.assignedTo || undefined,
       notes: notes,
       activityLog: [{
         id: `log-${timestamp}`,
-        timestamp: new Date().toISOString(),
+        timestamp: isoString,
         type: 'status_change',
         description: `Lead created manually in ${formData.sheetName}`,
         author: 'User'
@@ -93,8 +93,11 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ salesPersons, sheetT
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium border border-blue-100">
+             <Clock size={14} />
+             Lead creation date will be set to: {new Date().toLocaleDateString('en-GB')}
+          </div>
           
-          {/* Sheet/Month Selection */}
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Select Month (Sheet)</label>
             <div className="relative">
@@ -114,162 +117,75 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ salesPersons, sheetT
 
           <div className="border-t border-gray-100 pt-2"></div>
 
-          {/* Mandatory Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name <span className="text-red-500">*</span></label>
               <div className="relative">
                 <User className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                <input 
-                  required
-                  type="text"
-                  placeholder="Customer Name"
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                />
+                <input required type="text" placeholder="Customer Name" className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
             </div>
-
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Phone No <span className="text-red-500">*</span></label>
               <div className="relative">
                 <Phone className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                <input 
-                  required
-                  type="tel"
-                  placeholder="9876543210"
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.phone}
-                  onChange={e => setFormData({...formData, phone: e.target.value})}
-                />
+                <input required type="tel" placeholder="9876543210" className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
               </div>
             </div>
           </div>
 
-          {/* Contact Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email ID</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                <input 
-                  type="email"
-                  placeholder="email@example.com"
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.email}
-                  onChange={e => setFormData({...formData, email: e.target.value})}
-                />
-              </div>
+              <input type="email" placeholder="email@example.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
             </div>
-
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Address</label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                <input 
-                  type="text"
-                  placeholder="City, Street"
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.address}
-                  onChange={e => setFormData({...formData, address: e.target.value})}
-                />
-              </div>
+              <input type="text" placeholder="City, Street" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
             </div>
           </div>
 
-          {/* Solar Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div>
                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Property Type</label>
-               <select 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.propertyType}
-                  onChange={e => setFormData({...formData, propertyType: e.target.value})}
-               >
+               <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.propertyType} onChange={e => setFormData({...formData, propertyType: e.target.value})}>
                  <option value="Individual House">Individual House</option>
                  <option value="Apartment">Apartment</option>
                  <option value="Commercial">Commercial</option>
                  <option value="Industrial">Industrial</option>
-                 <option value="School/College">School/College</option>
                </select>
              </div>
              <div>
                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Avg Monthly Bill</label>
-               <input 
-                  type="text"
-                  placeholder="e.g. 2500"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.avgBill}
-                  onChange={e => setFormData({...formData, avgBill: e.target.value})}
-               />
+               <input type="text" placeholder="e.g. 2500" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.avgBill} onChange={e => setFormData({...formData, avgBill: e.target.value})} />
              </div>
           </div>
 
           <div className="border-t border-gray-100 pt-4"></div>
 
-          {/* CRM Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Assign To</label>
-              <div className="relative">
-                <Users className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                <select 
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.assignedTo}
-                  onChange={e => setFormData({...formData, assignedTo: e.target.value})}
-                >
-                  <option value="">-- Select Sales Person --</option>
-                  {salesPersons.map(sp => (
-                    <option key={sp.id} value={sp.id}>{sp.name}</option>
-                  ))}
-                </select>
-              </div>
+              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.assignedTo} onChange={e => setFormData({...formData, assignedTo: e.target.value})}>
+                <option value="">-- Select Sales Person --</option>
+                {salesPersons.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+              </select>
             </div>
-
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Next Reminder</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                <input 
-                  type="datetime-local"
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
-                  value={formData.nextReminder}
-                  onChange={e => setFormData({...formData, nextReminder: e.target.value})}
-                />
-              </div>
+              <input type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" value={formData.nextReminder} onChange={e => setFormData({...formData, nextReminder: e.target.value})} />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Initial Note</label>
-            <div className="relative">
-              <FileText className="absolute left-3 top-3 text-gray-400" size={16} />
-              <textarea 
-                rows={3}
-                placeholder="Add initial comments..."
-                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm resize-none"
-                value={formData.note}
-                onChange={e => setFormData({...formData, note: e.target.value})}
-              />
-            </div>
+            <textarea rows={3} placeholder="Add initial comments..." className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm resize-none" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} />
           </div>
-
         </form>
 
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-          <button 
-            onClick={onClose}
-            type="button"
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button 
-            onClick={handleSubmit}
-            disabled={loading}
-            className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 flex items-center gap-2"
-          >
+          <button onClick={onClose} type="button" className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={loading} className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 flex items-center gap-2">
             {loading ? 'Saving...' : <><Save size={16} /> Create Lead</>}
           </button>
         </div>

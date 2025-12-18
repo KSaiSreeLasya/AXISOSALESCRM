@@ -1,3 +1,4 @@
+
 import { Lead, Note, ActivityLogEntry, SalesPerson } from '../types';
 
 // Map App Lead to DB Column format (snake_case)
@@ -18,6 +19,7 @@ export const mapLeadToDB = (lead: Lead) => ({
   last_contact: lead.lastContact,
   next_reminder: lead.nextReminder || null,
   assigned_to: lead.assignedTo || null,
+  created_at: lead.createdAt
 });
 
 // Map DB Row to App Lead format (camelCase)
@@ -36,6 +38,7 @@ export const mapDBToLead = (row: any): Lead => ({
   status: row.status,
   value: row.value,
   lastContact: row.last_contact,
+  createdAt: row.created_at,
   nextReminder: row.next_reminder || '',
   assignedTo: row.assigned_to || undefined,
   // Relations - handle if they are joined or empty

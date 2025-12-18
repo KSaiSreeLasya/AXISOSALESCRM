@@ -1,3 +1,4 @@
+
 export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost' | 'Call Back' | 'Not Connected' | 'Busy' | 'Not lifted' | 'Voice Message' | 'Quotation sent' | 'Site visit' | 'Site Visit - Done' | 'Site Visit - Not Done' | 'Advance payment' | 'Lead finished' | 'repeated';
 
 export interface User {
@@ -50,6 +51,7 @@ export interface Lead {
   // Computed fields for UI consistency
   value: number; // Estimated value based on bill or defaults
   lastContact: string; // Default to today if not present
+  createdAt: string; // ISO timestamp of when lead was added to CRM
   
   // Detailed Notes
   notes: Note[];
