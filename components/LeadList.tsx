@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2, UserCheck, Layers, Plus, Clock } from 'lucide-react';
+import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2, UserCheck, Layers, Plus, Clock, Sparkles } from 'lucide-react';
 import { Lead, SalesPerson, SheetTab, User } from '../types';
 import { LEAD_STATUSES } from '../utils/helpers';
 import { AddLeadModal } from './AddLeadModal';
@@ -50,6 +50,7 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
   const baseLeads = getBaseFilteredLeads();
   const allLeadsCount = baseLeads.length;
   const myLeadsCount = baseLeads.filter(l => l.assignedTo === currentUser.id).length;
+  const unassignedCountInView = baseLeads.filter(l => !l.assignedTo).length;
 
   const displayLeads = baseLeads.filter(lead => {
     if (viewMode === 'mine') return lead.assignedTo === currentUser.id;
@@ -75,8 +76,6 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
     return !isNaN(cleanPin) && cleanPin >= 500001 && cleanPin <= 509412;
   };
 
-  const unassignedCount = displayLeads.filter(l => !l.assignedTo).length;
-
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleDateString('en-GB', {
@@ -91,19 +90,30 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
       <div className="p-4 border-b border-gray-100 flex flex-col gap-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex flex-col gap-3">
-             <div className="flex items-center gap-4">
+             <div className="flex items-center gap-4 flex-wrap">
                 <div>
                   <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                     <FileSpreadsheet className="text-brand-600" size={20} />
                     Lead Data
                   </h2>
                 </div>
-                <button 
-                  onClick={() => setIsAddingLead(true)}
-                  className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg hover:bg-brand-700 shadow-sm transition-colors"
-                >
-                  <Plus size={14} /> Add Lead
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setIsAddingLead(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-bold rounded-lg hover:bg-brand-700 shadow-sm transition-colors"
+                  >
+                    <Plus size={14} /> Add Lead
+                  </button>
+                  {currentUser.role === 'admin' && unassignedCountInView > 0 && (
+                    <button 
+                      onClick={() => onAutoAssign(activeSheet)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-brand-50 text-brand-700 text-xs font-bold rounded-lg hover:bg-brand-100 shadow-sm transition-colors border border-brand-200"
+                      title={`Automatically assign ${unassignedCountInView} unassigned leads in ${activeSheet}`}
+                    >
+                      <UserPlus size={14} /> Auto Assign ({unassignedCountInView})
+                    </button>
+                  )}
+                </div>
              </div>
              <div className="bg-gray-100 p-1 rounded-lg inline-flex self-start">
                 <button
