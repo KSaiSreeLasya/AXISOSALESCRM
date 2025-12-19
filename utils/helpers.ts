@@ -23,7 +23,8 @@ export const LEAD_STATUSES = [
   "Busy",
   "Call Back",
   "New", 
-  "Repeated"
+  "Repeated",
+  "Not Interested"
 ];
 
 // Robust CSV Line Parser that handles quotes and commas correctly
