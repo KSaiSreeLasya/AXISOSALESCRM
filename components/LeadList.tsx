@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2, UserCheck, Layers, Plus, Clock, Sparkles } from 'lucide-react';
-import { Lead, SalesPerson, SheetTab, User } from '../types';
+import { Search, Filter, FileSpreadsheet, UserPlus, Users, ChevronRight, Calendar, Pencil, Trash2, UserCheck, Layers, Plus, Clock, Sparkles, StickyNote, X, Send } from 'lucide-react';
+import { Lead, SalesPerson, SheetTab, User, Note } from '../types';
 import { LEAD_STATUSES } from '../utils/helpers';
 import { AddLeadModal } from './AddLeadModal';
 
@@ -23,6 +23,8 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
   const [isAddingLead, setIsAddingLead] = useState(false);
+  const [quickNoteLead, setQuickNoteLead] = useState<Lead | null>(null);
+  const [newQuickNote, setNewQuickNote] = useState('');
 
   // Source of truth for sheets is the active configuration + "Manual Entry"
   const availableSheets = Array.from(new Set([
@@ -64,7 +66,7 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
         return 'bg-green-100 text-green-700 border-green-200';
     }
     if (s.includes('won') || s.includes('advance')) return 'bg-green-100 text-green-700 border-green-200';
-    if (s.includes('lost') || s.includes('not connected')) return 'bg-red-100 text-red-700 border-red-200';
+    if (s.includes('lost') || s.includes('not connected') || s.includes('not interested')) return 'bg-red-100 text-red-700 border-red-200';
     if (s.includes('call') || s.includes('busy')) return 'bg-orange-100 text-orange-700 border-orange-200';
     if (s.includes('quotation')) return 'bg-blue-100 text-blue-700 border-blue-200';
     return 'bg-gray-100 text-gray-700 border-gray-200';
@@ -83,6 +85,20 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
       month: '2-digit',
       year: '2-digit'
     });
+  };
+
+  const handleAddQuickNote = () => {
+    if (!quickNoteLead || !newQuickNote.trim()) return;
+    const note: Note = {
+      id: `note-${Date.now()}`,
+      content: newQuickNote,
+      timestamp: new Date().toISOString(),
+      author: currentUser.name
+    };
+    onUpdateLead(quickNoteLead.id, { notes: [note, ...quickNoteLead.notes] });
+    setNewQuickNote('');
+    // Update local state for immediate feedback
+    setQuickNoteLead({ ...quickNoteLead, notes: [note, ...quickNoteLead.notes] });
   };
 
   return (
@@ -170,12 +186,15 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
               <th className="px-4 py-3 font-semibold border-b">Avg Bill</th>
               <th className="px-4 py-3 font-semibold border-b">Assigned To</th>
               <th className="px-4 py-3 font-semibold border-b">Status</th>
+              <th className="px-4 py-3 font-semibold border-b">Latest Note</th>
               <th className="px-4 py-3 font-semibold border-b text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white text-sm">
             {displayLeads.map((lead) => {
               const isGreen = isTargetPincode(lead.postCode);
+              const latestNote = lead.notes && lead.notes.length > 0 ? lead.notes[0] : null;
+              
               return (
               <tr 
                 key={lead.id} 
@@ -222,15 +241,32 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
                       {LEAD_STATUSES.map(status => <option key={status} value={status} className="bg-white text-gray-900">{status}</option>)}
                    </select>
                 </td>
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <button 
+                    onClick={() => setQuickNoteLead(lead)}
+                    className="flex flex-col text-left group/note max-w-[180px]"
+                  >
+                    {latestNote ? (
+                      <>
+                        <p className="text-xs text-gray-700 truncate line-clamp-1 group-hover/note:text-brand-600 font-medium">{latestNote.content}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 italic">{new Date(latestNote.timestamp).toLocaleDateString()}</p>
+                      </>
+                    ) : (
+                      <span className="text-xs text-gray-400 flex items-center gap-1 group-hover/note:text-brand-500 transition-colors">
+                        <Plus size={10} /> Add Note
+                      </span>
+                    )}
+                  </button>
+                </td>
                 <td className="px-4 py-3 text-center flex items-center justify-center gap-2" onClick={e => e.stopPropagation()}>
-                   <button onClick={() => onSelectLead(lead)} className="text-gray-500 hover:text-brand-600 p-2 rounded-lg transition-colors"><Pencil size={16} /></button>
-                   <button onClick={() => onDeleteLead(lead.id)} className="text-gray-400 hover:text-red-600 p-2 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                   <button onClick={() => onSelectLead(lead)} className="text-gray-500 hover:text-brand-600 p-2 rounded-lg transition-colors" title="View/Edit Full Details"><Pencil size={16} /></button>
+                   <button onClick={() => onDeleteLead(lead.id)} className="text-gray-400 hover:text-red-600 p-2 rounded-lg transition-colors" title="Delete Lead"><Trash2 size={16} /></button>
                 </td>
               </tr>
             )})}
             {displayLeads.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
                    No leads found matching current filters.
                 </td>
               </tr>
@@ -238,6 +274,63 @@ export const LeadList: React.FC<LeadListProps> = ({ leads, sheetTabs, salesPerso
           </tbody>
         </table>
       </div>
+
+      {/* Quick Note Modal */}
+      {quickNoteLead && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-gray-100">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                 <div>
+                    <h3 className="font-bold text-gray-800 text-sm">Notes for {quickNoteLead.name}</h3>
+                    <p className="text-[10px] text-gray-500 font-mono mt-0.5">{quickNoteLead.phone}</p>
+                 </div>
+                 <button onClick={() => setQuickNoteLead(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                    <X size={18} />
+                 </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white min-h-[200px]">
+                {quickNoteLead.notes.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-400 py-10">
+                     <StickyNote size={32} className="opacity-20 mb-2" />
+                     <p className="text-xs italic">No notes added yet.</p>
+                  </div>
+                ) : (
+                  quickNoteLead.notes.map((note) => (
+                    <div key={note.id} className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                       <p className="text-sm text-gray-800 leading-relaxed">{note.content}</p>
+                       <div className="flex justify-between items-center mt-2 text-[10px] font-medium text-gray-400">
+                          <span className="flex items-center gap-1"><UserCheck size={10} className="text-brand-500" /> {note.author || 'System'}</span>
+                          <span>{new Date(note.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                       </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="p-4 border-t border-gray-100 bg-gray-50">
+                <div className="relative">
+                  <textarea 
+                    autoFocus
+                    value={newQuickNote} 
+                    onChange={(e) => setNewQuickNote(e.target.value)} 
+                    placeholder="Type a quick note..." 
+                    rows={2} 
+                    className="w-full pl-3 pr-12 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none resize-none shadow-inner"
+                  />
+                  <button 
+                    onClick={handleAddQuickNote}
+                    disabled={!newQuickNote.trim()}
+                    className={`absolute right-2 bottom-2 p-2 rounded-lg transition-all ${newQuickNote.trim() ? 'bg-brand-600 text-white shadow-sm hover:scale-105' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
+                  >
+                    <Send size={16} />
+                  </button>
+                </div>
+              </div>
+           </div>
+        </div>
+      )}
+
       {isAddingLead && <AddLeadModal salesPersons={salesPersons} sheetTabs={sheetTabs} onClose={() => setIsAddingLead(false)} onSave={onAddLead} />}
     </div>
   );
