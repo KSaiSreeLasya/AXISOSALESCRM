@@ -306,7 +306,15 @@ const App: React.FC = () => {
       const dbUpdates: any = {};
       if (updates.status) dbUpdates.status = updates.status;
       if (updates.assignedTo !== undefined) dbUpdates.assigned_to = updates.assignedTo || null;
-      if (updates.nextReminder) dbUpdates.next_reminder = updates.nextReminder;
+      if (updates.nextReminder !== undefined) dbUpdates.next_reminder = updates.nextReminder || null;
+      
+      // Expanded fields to support full editing
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+      if (updates.email !== undefined) dbUpdates.email = updates.email;
+      if (updates.address !== undefined) dbUpdates.address = updates.address;
+      if (updates.propertyType !== undefined) dbUpdates.property_type = updates.propertyType;
+      if (updates.avgBill !== undefined) dbUpdates.avg_bill = updates.avgBill;
 
       if (Object.keys(dbUpdates).length > 0) {
           const { error } = await supabase.from('leads').update(dbUpdates).eq('id', leadId);
@@ -576,7 +584,7 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 overflow-auto p-4 md:p-6 scrollbar-hide bg-gray-50/50">
-          {currentView === 'dashboard' && <Dashboard leads={activeLeads} metrics={metrics} />}
+          {currentView === 'dashboard' && <Dashboard leads={activeLeads} sheetTabs={config.tabs} metrics={metrics} />}
           {currentView === 'leads' && (
             <LeadList 
                 leads={activeLeads} 
